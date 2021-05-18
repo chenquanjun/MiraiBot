@@ -13,7 +13,16 @@ from config import data_path, setu_apikey, setu_proxy, setu_r18
 
 Path(data_path).mkdir(exist_ok=True)
 SAVE_FILE = Path(data_path).joinpath('setu.json')
+FREQUENCY_FILE = Path(data_path).joinpath('setu_frequency.gif')
 
+FrequencyBytes = None
+
+def LoadFrequencyFile():
+    global FrequencyBytes
+    if FrequencyBytes is None:
+        with open(FREQUENCY_FILE,"rb") as f:
+            FrequencyBytes = f.read()
+    return FrequencyBytes
 
 class SetuData(BaseModel):
     pid: int = None

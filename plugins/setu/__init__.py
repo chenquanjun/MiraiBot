@@ -10,10 +10,10 @@ from mirai import (
 from mirai.event.message.chain import Source
 from mirai.logger import Event as EventLogger
 
-from .SetuData import SetuData, SetuResp, SetuDatabase
+from .SetuData import SetuData, SetuResp, SetuDatabase, LoadFrequencyFile
 from .._utils import CoolDown, shuzi2number
 
-cd = CoolDown(app='setu', td=20)
+cd = CoolDown(app='setu', td=5)
 
 sub_app = Mirai(f"mirai://localhost:8080/?authKey=0&qq=0")
 
@@ -50,6 +50,7 @@ async def setuExecutor(app: Mirai, message: GroupMessage, number: int, keyword: 
     """根据关键词获取data_array，并调用sendSetu"""
     global LAST_QUOTA
     member_id: int = message.sender.id
+    group: Group = message.sender.group
     if keyword == '':
         if len(SetuDatabase.load_from_file().__root__) >= 300 and LAST_QUOTA < 200:
             resp = SetuResp(code=-430, msg='空关键词')
@@ -60,7 +61,10 @@ async def setuExecutor(app: Mirai, message: GroupMessage, number: int, keyword: 
         resp = await SetuResp.get(keyword)
         LAST_QUOTA = resp.quota
     else:
-        resp = SetuResp(code=-3, msg='你的请求太快了，休息一下吧')
+        # resp = SetuResp(code=-3, msg='你的请求太快了，休息一下吧')
+        await app.sendGroupMessage(group,
+                                   [At(member_id), Plain('太快了，受不了！\n'), Image.fromBytes(LoadFrequencyFile())])
+        return
 
     if resp.code == 0:
         cd.update(member_id)
@@ -69,7 +73,6 @@ async def setuExecutor(app: Mirai, message: GroupMessage, number: int, keyword: 
         db = SetuDatabase.load_from_file()
         await sendSetu(app, message, db.__root__, number)
     else:
-        group: Group = message.sender.group
         source: Source = message.messageChain.getSource()
         await app.sendGroupMessage(group, resp.msg, source)
 
@@ -81,13 +84,18 @@ async def sendSetu(app: Mirai, message: GroupMessage, data_array: Union[Set[Setu
 
     async def send(prefix_: str, data_: SetuData):
         try:
-            setu_b: bytes = await data_.get()
+            setu_b: bytes = await data_.get(False)
             await app.sendGroupMessage(group,
                                        [At(sender.id), Plain(prefix_ + data_.purl + '\n'), Image.fromBytes(setu_b)])
             EventLogger.info(f"{prefix_}色图已发送，标签：{','.join(data_.tags)}")
         except asyncio.TimeoutError as e:
             EventLogger.warn('连接超时' + str(e))
-            raise e
+            # raise e
+            try:
+                await app.sendGroupMessage(group,
+                    [At(sender.id), Plain(prefix_ + data_.purl + '\n' + data_.url + '\n自己动手，丰衣足食')])
+            except Exception as e:
+                raise e
         except ValueError as e:
             EventLogger.warn('图片尺寸检查失败' + str(e))
             raise e
